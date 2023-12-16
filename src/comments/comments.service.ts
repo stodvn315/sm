@@ -1,40 +1,52 @@
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/postgresql';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { Comment, User, Userpost } from 'src/models/all.entity';
+
+import { User } from '../users/user.entity';
+import { Userpost } from '../posts/userpost.entity';
+import { Comment } from './comment.entity';
 import { CreateCommentDto } from './dto/createComment.dto';
 
 @Injectable()
 export class CommentsService {
   constructor(private readonly em: EntityManager) {}
 
-  async getPostComments(postId: string): Promise<Comment[]> {
-    return await this.em.find(Comment, { post: postId });
+  async getPostComments(postUuid: string): Promise<Comment[]> {
+    return await this.em.find(Comment, { post: postUuid });
   }
 
   async createComment(
-    createDto: CreateCommentDto,
-    postId: string,
-    userId: string,
+    commentDto: CreateCommentDto,
+    postUuid: string,
+    userUuid: string,
   ): Promise<Comment> {
-    const { content } = createDto;
-    const comment = new Comment(content);
-    const postRef = this.em.getReference(Userpost, postId);
-    const userRef = this.em.getReference(User, userId);
-    comment.post = postRef.uuid;
-    comment.owner = userRef.uuid;
-    await this.em.persistAndFlush(comment);
-    return comment;
+    const comment = new Comment(commentDto.content);
+    const post = await this.em.getReference(Userpost, postUuid);
+    const user = await this.em.getReference(User, userUuid);
+    if (user && post) {
+      comment.setPost(post);
+      comment.setOwner(user);
+      await this.em.persistAndFlush(comment);
+      return comment;
+    }
+    throw new BadRequestException('User or post not found');
   }
 
-  async deleteComment(commentId: string, currUserId: string): Promise<Comment> {
-    const comment = await this.em.findOne(Comment, commentId);
-    const userRef = await this.em.getReference(User, currUserId);
-    if (comment.owner === userRef.uuid) {
+  async deleteComment(
+    commentUuid: string,
+    currUserUuid: string,
+  ): Promise<Comment> {
+    const comment = await this.em.findOne(Comment, commentUuid, {
+      populate: ['owner'],
+    });
+    const currUser = await this.em.findOne(User, currUserUuid);
+    if (comment.getOwner().getUuid() === currUser.getUuid()) {
       await this.em.removeAndFlush(comment);
       return comment;
     }
-    throw new UnauthorizedException({
-      message: "Comment doesn't belong to this user",
-    });
+    throw new UnauthorizedException("Comment doesn't belong to this user");
   }
 }

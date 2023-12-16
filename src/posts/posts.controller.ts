@@ -2,60 +2,107 @@ import {
   Body,
   Controller,
   Delete,
+  FileTypeValidator,
   Get,
   Param,
+  ParseFilePipe,
   Post,
-  UseGuards,
-  Headers,
+  Put,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+
+import { UserId } from '../decorators/user-id.decorator';
+import { FilesService } from '../files/files.service';
 import { PostsService } from './posts.service';
-import { Userpost } from 'src/models/all.entity';
 import { CreatePostDto } from './dto/createPost.dto';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { JwtService } from '@nestjs/jwt';
 
 @Controller('posts')
 export class PostsController {
   constructor(
     private readonly postsService: PostsService,
-    private readonly jwtService: JwtService,
+    private readonly filesService: FilesService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  getAll(): Promise<Userpost[]> {
+  getAll() {
     return this.postsService.getAll();
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  getById(@Param('id') id: string): Promise<Userpost> {
-    return this.postsService.getById(id);
+  @Get('feed')
+  getFeed(@UserId() currUserUuid: string) {
+    return this.postsService.getFeed(currUserUuid);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Get('user/:id')
-  getUserPosts(@Param('id') id: string): Promise<Userpost[]> {
-    return this.postsService.getUserPosts(id);
+  @Get(':uuid')
+  getById(@Param('uuid') uuid: string) {
+    return this.postsService.getById(uuid);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Get('user/:userUuid')
+  getUserPosts(@Param('userUuid') userUuid: string) {
+    return this.postsService.getUserPosts(userUuid);
+  }
+
   @Post()
+  @UseInterceptors(FileInterceptor('image'))
   createPost(
-    @Headers('authorization') auth: string,
+    @UserId() currUserUuid: string,
     @Body() createPostDto: CreatePostDto,
-  ): Promise<Userpost> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.postsService.createPost(createPostDto, id);
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [new FileTypeValidator({ fileType: 'image/jpeg' })],
+      }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const fileName = this.filesService.createFile(file);
+    return this.postsService.createPost(createPostDto, currUserUuid, fileName);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Delete(':id')
-  deletePost(
-    @Headers('authorization') auth: string,
-    @Param('id') postId: string,
-  ): Promise<Userpost> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.postsService.deletePost(postId, id);
+  @Put(':postUuid')
+  @UseInterceptors(FileInterceptor('image'))
+  async updatePost(
+    @UserId() currUserUuid: string,
+    @Param('postUuid') postUuid: string,
+    @Body() createPostDto: CreatePostDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [new FileTypeValidator({ fileType: 'image/jpeg' })],
+      }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const fileName = this.filesService.createFile(file);
+    const oldFileName = await this.postsService.getPostPhoto(postUuid);
+    const updatedPost = this.postsService.updatePost(
+      createPostDto,
+      currUserUuid,
+      postUuid,
+      fileName,
+    );
+    if (await updatedPost) {
+      this.filesService.deleteFile(oldFileName);
+    }
+    return updatedPost;
+  }
+
+  @Delete(':postUuid')
+  async deletePost(
+    @UserId() currUserUuid: string,
+    @Param('postUuid') postUuid: string,
+  ) {
+    const oldFileName = await this.postsService.getPostPhoto(postUuid);
+    const deletedPost = await this.postsService.deletePost(
+      postUuid,
+      currUserUuid,
+    );
+    if (deletedPost) {
+      this.filesService.deleteFile(oldFileName);
+    }
+    return deletedPost;
   }
 }

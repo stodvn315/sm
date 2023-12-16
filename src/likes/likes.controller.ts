@@ -1,40 +1,30 @@
-import {
-  Controller,
-  Delete,
-  Param,
-  Post,
-  UseGuards,
-  Headers,
-} from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post } from '@nestjs/common';
+
+import { UserId } from '../decorators/user-id.decorator';
 import { LikesService } from './likes.service';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { JwtService } from '@nestjs/jwt';
-import { Like } from 'src/models/all.entity';
 
-@Controller('posts/:postId/likes')
+@Controller('posts/:postUuid/likes')
 export class LikesController {
-  constructor(
-    private readonly likesService: LikesService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly likesService: LikesService) {}
 
-  @UseGuards(JwtAuthGuard)
-  @Post()
-  async createLike(
-    @Headers('authorization') auth: string,
-    @Param('postId') postId: string,
-  ): Promise<Like> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.likesService.createLike(postId, id);
+  @Get()
+  getPostLikes(@Param('postUuid') postUuid: string) {
+    return this.likesService.getPostLikes(postUuid);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @Post()
+  createLike(
+    @UserId() currUserUuid: string,
+    @Param('postUuid') postUuid: string,
+  ) {
+    return this.likesService.createLike(postUuid, currUserUuid);
+  }
+
   @Delete()
-  async deleteLike(
-    @Headers('authorization') auth: string,
-    @Param('postId') postId: string,
-  ): Promise<Like> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.likesService.deleteLike(postId, id);
+  deleteLike(
+    @UserId() currUserUuid: string,
+    @Param('postUuid') postUuid: string,
+  ) {
+    return this.likesService.deleteLike(postUuid, currUserUuid);
   }
 }

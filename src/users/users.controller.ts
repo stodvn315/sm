@@ -2,41 +2,87 @@ import {
   Body,
   Controller,
   Delete,
+  FileTypeValidator,
   Get,
   Param,
+  ParseFilePipe,
   Post,
-  UseGuards,
+  Put,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/createUser.dto';
-import { User } from '../models/all.entity';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { FilesService } from '../files/files.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly filesService: FilesService,
+  ) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  getAll(): Promise<User[]> {
+  getAll() {
     return this.usersService.getAll();
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Get(':id')
-  getOne(@Param('id') id: string): Promise<User> {
-    return this.usersService.getOne(id);
+  @Get(':uuid')
+  getOne(@Param('uuid') uuid: string) {
+    return this.usersService.getOne(uuid);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Delete(':id')
-  deleteUser(@Param('id') id: string): Promise<User> {
-    return this.usersService.deleteUser(id);
-  }
-
-  @UseGuards(JwtAuthGuard)
   @Post()
-  createUser(@Body() userDto: CreateUserDto): Promise<User> {
-    return this.usersService.createUser(userDto);
+  @UseInterceptors(FileInterceptor('image'))
+  createUser(
+    @Body() userDto: CreateUserDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [new FileTypeValidator({ fileType: 'image/jpeg' })],
+      }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const photo = this.filesService.createFile(file);
+    return this.usersService.createUser(userDto, photo);
+  }
+
+  @Put(':uuid')
+  @UseInterceptors(FileInterceptor('image'))
+  async updateUser(
+    @Param('uuid') uuid: string,
+    @Body() userDto,
+    @UploadedFile(
+      new ParseFilePipe({
+        fileIsRequired: false,
+        validators: [new FileTypeValidator({ fileType: 'image/jpeg' })],
+      }),
+    )
+    file?: Express.Multer.File,
+  ) {
+    const newPhoto = this.filesService.createFile(file);
+    const oldPhoto = await this.usersService.getUserPhoto(uuid);
+    const updatedUser = await this.usersService.updateUser(
+      uuid,
+      userDto,
+      newPhoto,
+    );
+    if (updatedUser) {
+      this.filesService.deleteFile(oldPhoto);
+    }
+    return updatedUser;
+  }
+
+  @Delete(':uuid')
+  async deleteUser(@Param('uuid') uuid: string) {
+    const photo = await this.usersService.getUserPhoto(uuid);
+    const deletedUser = await this.usersService.deleteUser(uuid);
+    if (deletedUser) {
+      this.filesService.deleteFile(photo);
+    }
+    return deletedUser;
   }
 }

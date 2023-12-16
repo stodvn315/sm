@@ -1,50 +1,37 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  UseGuards,
-  Headers,
-  Body,
-} from '@nestjs/common';
+import { Controller, Delete, Get, Param, Post, Body } from '@nestjs/common';
+
+import { UserId } from '../decorators/user-id.decorator';
 import { CommentsService } from './comments.service';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { Comment } from 'src/models/all.entity';
+import { Comment } from './comment.entity';
 import { CreateCommentDto } from './dto/createComment.dto';
-import { JwtService } from '@nestjs/jwt';
 
-@Controller('posts/:postId/comments')
+@Controller('posts/:postUuid/comments')
 export class CommentsController {
-  constructor(
-    private readonly commentsService: CommentsService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly commentsService: CommentsService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Get()
-  getPostComments(@Param('postId') postId: string): Promise<Comment[]> {
-    return this.commentsService.getPostComments(postId);
+  getPostComments(@Param('postUuid') postUuid: string): Promise<Comment[]> {
+    return this.commentsService.getPostComments(postUuid);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   async createComment(
-    @Headers('authorization') auth: string,
-    @Param('postId') postId: string,
+    @UserId() currUserUuid: string,
+    @Param('postUuid') postUuid: string,
     @Body() createDto: CreateCommentDto,
   ): Promise<Comment> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.commentsService.createComment(createDto, postId, id);
+    return this.commentsService.createComment(
+      createDto,
+      postUuid,
+      currUserUuid,
+    );
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Delete(':id')
+  @Delete(':uuid')
   async deleteComment(
-    @Headers('authorization') auth: string,
-    @Param('id') commentId: string,
+    @UserId() currUserUuid: string,
+    @Param('uuid') commentUuid: string,
   ): Promise<Comment> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.commentsService.deleteComment(commentId, id);
+    return this.commentsService.deleteComment(commentUuid, currUserUuid);
   }
 }

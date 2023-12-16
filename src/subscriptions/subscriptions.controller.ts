@@ -1,40 +1,26 @@
-import {
-  Controller,
-  Post,
-  UseGuards,
-  Headers,
-  Param,
-  Delete,
-} from '@nestjs/common';
+import { Controller, Post, Param, Delete } from '@nestjs/common';
+
+import { UserId } from '../decorators/user-id.decorator';
 import { SubscriptionsService } from './subscriptions.service';
-import { JwtService } from '@nestjs/jwt';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { Subscription } from 'src/models/all.entity';
+import { Subscription } from './subscription.entity';
 
-@Controller('users/:userId/subscriptions')
+@Controller('users/:targetUserUuid/subscriptions')
 export class SubscriptionsController {
-  constructor(
-    private readonly subsService: SubscriptionsService,
-    private readonly jwtService: JwtService,
-  ) {}
+  constructor(private readonly subsService: SubscriptionsService) {}
 
-  @UseGuards(JwtAuthGuard)
   @Post()
   subscribe(
-    @Headers('authorization') auth: string,
-    @Param('userId') userId: string,
+    @UserId() currUserUuid: string,
+    @Param('targetUserUuid') targetUserUuid: string,
   ): Promise<Subscription> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.subsService.subscribe(userId, id);
+    return this.subsService.subscribe(targetUserUuid, currUserUuid);
   }
 
-  @UseGuards(JwtAuthGuard)
   @Delete()
   unsubscribe(
-    @Headers('authorization') auth: string,
-    @Param('userId') userId: string,
+    @UserId() currUserUuid: string,
+    @Param('targetUserUuid') targetUserUuid: string,
   ): Promise<Subscription> {
-    const { id } = Object(this.jwtService.decode(auth.split(' ')[1]));
-    return this.subsService.unsubscribe(userId, id);
+    return this.subsService.unsubscribe(targetUserUuid, currUserUuid);
   }
 }

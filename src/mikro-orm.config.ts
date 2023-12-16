@@ -1,21 +1,27 @@
 import { Logger } from '@nestjs/common';
-import { Options } from '@mikro-orm/core';
 import { SqlHighlighter } from '@mikro-orm/sql-highlighter';
 import { TsMorphMetadataProvider } from '@mikro-orm/reflection';
+import { MikroOrmModuleAsyncOptions } from '@mikro-orm/nestjs';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 const logger = new Logger('MikroORM');
-const config = {
-  entities: ['dist/**/*.entity.js'],
-  entitiesTs: ['src/**/*.entity.ts'],
-  dbName: process.env.DB_NAME,
-  type: 'postgresql',
-  host: 'localhost',
-  port: Number(process.env.DB_PORT),
-  highlighter: new SqlHighlighter(),
-  debug: true,
-  logger: logger.log.bind(logger),
-  password: process.env.DB_PASSWORD,
-  metadataProvider: TsMorphMetadataProvider,
-} as Options;
+const mikroOrmConfig: MikroOrmModuleAsyncOptions = {
+  imports: [ConfigModule],
+  inject: [ConfigService],
+  useFactory: (configService: ConfigService) => ({
+    entities: ['dist/**/*.entity.js'],
+    entitiesTs: ['src/**/*.entity.ts'],
+    type: 'postgresql',
+    dbName: configService.get<string>('database.name'),
+    user: configService.get<string>('database.user'),
+    password: configService.get<string>('database.password'),
+    host: configService.get<string>('database.host'),
+    port: configService.get<number>('database.port'),
+    debug: true,
+    logger: logger.log.bind(logger),
+    highlighter: new SqlHighlighter(),
+    metadataProvider: TsMorphMetadataProvider,
+  }),
+};
 
-export default config;
+export default mikroOrmConfig;
